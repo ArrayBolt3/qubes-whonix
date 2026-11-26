@@ -33,8 +33,8 @@ Tasks of this script:
 
 - Whonix-Gateway (sys-whonix):
   - Replace file '/usr/share/tor/tor-service-defaults-torrc.anondist.base'
-    default 'eth1' IP '10.152.152.10' with qubes_ipv4_qubesdb_qubes_netvm_gateway
-    (qubesdb-read /qubes-netvm-gateway).
+    default 'eth1' IP '10.152.152.10' with
+    qubes_ipv4_qubesdb_qubes_netvm_gateway (qubesdb-read /qubes-netvm-gateway).
     Purpose: Tor can bind to 'eth1'.
   - Replace file '/usr/local/etc/torrc.d/50_user.conf'. Same as above.
     Purpose: Tor onion service can bind to 'eth1'.
@@ -59,20 +59,26 @@ import sys
 import re
 import subprocess
 import ipaddress
-import inspect
-from typing import Pattern, Any
-from types import FrameType
+from typing import Pattern
 
 IP_WAS_REPLACED: bool = False
 
-WHONIX_GATEWAY_IP4_ETH1_SAVE_FILE: str = "/var/cache/qubes-whonix/whonix-ip-gateway"
-WHONIX_GATEWAY_IP6_ETH1_SAVE_FILE: str = "/var/cache/qubes-whonix/whonix-ip6-gateway"
-WHONIX_WORKSTATION_IP4_ETH0_SAVE_FILE: str = "/var/cache/qubes-whonix/whonix-ip-local"
-WHONIX_WORKSTATION_IP6_ETH0_SAVE_FILE: str = "/var/cache/qubes-whonix/whonix-ip6-local"
+WHONIX_GATEWAY_IP4_ETH1_SAVE_FILE: str = (
+    "/var/cache/qubes-whonix/whonix-ip-gateway"
+)
+WHONIX_GATEWAY_IP6_ETH1_SAVE_FILE: str = (
+    "/var/cache/qubes-whonix/whonix-ip6-gateway"
+)
+WHONIX_WORKSTATION_IP4_ETH0_SAVE_FILE: str = (
+    "/var/cache/qubes-whonix/whonix-ip-local"
+)
+WHONIX_WORKSTATION_IP6_ETH0_SAVE_FILE: str = (
+    "/var/cache/qubes-whonix/whonix-ip6-local"
+)
 
 SEARCH_AND_REPLACE_FILE_LIST: list[str]
-# This is a list of all Whonix files that contain IP addresses that will
-# be searched and replaced with the currently assigned IP address
+## This is a list of all Whonix files that contain IP addresses that will
+## be searched and replaced with the currently assigned IP address
 if os.path.exists("/usr/share/anon-gw-base-files/gateway"):
     SEARCH_AND_REPLACE_FILE_LIST = [
         "/usr/share/whonix-gw-network-conf/network_internal_ip.txt",
@@ -95,7 +101,10 @@ elif os.path.exists("/usr/share/anon-ws-base-files/workstation"):
         "/usr/share/anon-apps-config/kioslaverc",
     ]
 else:
-    print("ERROR: Neither Whonix-Gateway nor Whonix-Workstation detected. Please report this bug.")
+    print(
+        "ERROR: Neither Whonix-Gateway nor Whonix-Workstation detected. "
+        "Please report this bug!"
+    )
     sys.exit(1)
 
 
@@ -103,34 +112,6 @@ whonix_gateway_ipv4_eth1_default: str = "10.152.152.10"
 whonix_gateway_ipv6_eth1_default: str = "fd19:c33d:88bc::10"
 whonix_workstation_ipv4_eth0_default: str = "10.152.152.11"
 whonix_workstation_ipv6_eth0_default: str = "fd19:c33d:88bc::11"
-
-
-def var_name(obj: Any, up: int = 1) -> str | None:
-    """
-    Best-effort: return the name of `obj` in a frame `up` levels above this one.
-
-    up = 1 -> immediate caller
-    up = 2 -> caller's caller, etc.
-    """
-    frame_arr: list[FrameType | None] = [inspect.currentframe()]
-    try:
-        # walk `up` frames back starting from this helper's frame
-        for _ in range(up):
-            if frame_arr[-1] is None:
-                return None
-            frame_arr.append(frame_arr[-1].f_back)
-        if frame_arr[-1] is None:
-            return None
-
-        for name, value in frame_arr[-1].f_locals.items():
-            if value is obj:
-                return name
-        return None
-    finally:
-        # Break reference cycles: the collected frames reference this
-        # helper's own frame via f_back, so drop the whole list here
-        # rather than waiting on the cyclic garbage collector.
-        del frame_arr
 
 
 def whonix_mode() -> str:
@@ -194,12 +175,17 @@ def ip_line_fixup(line: str, last_ip: str, current_ip: str) -> str:
 
 # pylint: disable=too-many-locals,too-many-branches
 def replace_ip(
+    context: str,
     ips: list[str],
     current_ip: str,
     files: list[str],
     ip_file: str
 ) -> bool:
     """Searches and replaces IP addresses in the provided files.
+
+    context:
+        A string describing what this function call is intended to do, for info
+        and error messages.
 
     ips:
         List of IP addresses to replace.
@@ -219,10 +205,6 @@ def replace_ip(
 
     replaced: bool = False
 
-    ips_varname = var_name(ips, up=2)
-    ip_file_varname = var_name(ip_file, up=3)
-    current_ip_varname = var_name(current_ip, up=2)
-
     for ip_item in ips:
         try:
             ipaddress.ip_address(ip_item)
@@ -233,9 +215,9 @@ def replace_ip(
 
     try:
         ipaddress.ip_address(current_ip)
-        # print(f"INFO: current_ip variable valid: '{current_ip_varname}' '{current_ip}'")
+        # print(f"INFO: {context}: current_ip variable valid: '{current_ip}'")
     except ValueError:
-        print(f"ERROR: current_ip variable invalid: '{current_ip_varname}' '{current_ip}'")
+        print(f"ERROR: {context}: current_ip variable invalid: '{current_ip}'")
         return replaced
 
     protocol: str
@@ -273,13 +255,14 @@ def replace_ip(
                     outfile.write(replaced_text)
                 replaced = True
                 print(
-                    f"INFO: '{protocol}': filename from filelist updated  : "
-                    f"'{filename}' '{ips_varname}' '{current_ip_varname}' '{current_ip}'"
+                    f"INFO: {context}: '{protocol}': filename from filelist "
+                    f"updated : '{filename}' '{current_ip}'"
                 )
             except IOError:
                 print(
-                    f"ERROR: '{protocol}': filename from filelist existing "
-                    f"but failed to open filename for writing: '{filename}'"
+                    f"ERROR: {context}: '{protocol}': filename from filelist "
+                    f"existing but failed to open filename for writing: "
+                    f"'{filename}'"
                 )
                 continue
     if replaced:
@@ -288,28 +271,27 @@ def replace_ip(
                 outfile.write(current_ip)
             replaced = True
             print(
-                f"INFO: '{protocol}': ip_file updated: "
-                f"'{ip_file_varname}' '{ip_file}' '{current_ip_varname}' '{current_ip}'"
+                f"INFO: {context}: '{protocol}': ip_file updated: "
+                f"'{ip_file}' '{current_ip}'"
             )
             IP_WAS_REPLACED = True
         except IOError:
             print(
-                f"ERROR: '{protocol}': writing to ip_file failed: "
-                f"'{ip_file_varname}' '{current_ip_varname}' '{current_ip}'"
+                f"ERROR: {context}: '{protocol}': writing to ip_file failed: "
+                f"'{ip_file}' '{current_ip}'"
             )
             return False
 
     return replaced
 
 
-def get_ip_address(filename: str, default: str = "") -> str:
+def get_ip_address(context: str, filename: str, default: str = "") -> str:
     """Retrieve an IP address from a file."""
-    filename_varname = var_name(filename, up=3)
 
     if not os.path.exists(filename):
         print(
-            f"INFO: IP filename does not exist (returning default): "
-            f"'{filename_varname}' '{filename}'"
+            f"INFO: {context}: IP filename does not exist (returning default): "
+            f"'{filename}'"
         )
         return default
 
@@ -320,22 +302,22 @@ def get_ip_address(filename: str, default: str = "") -> str:
             ip_txt: str = infile.read().strip()
     except (OSError, IOError):
         print(
-            f"INFO: IP filename exists but opening failed: "
-            f"'{filename_varname}' '{filename}'"
+            f"INFO: {context}: IP filename exists but opening failed: "
+            f"'{filename}'"
         )
         return default
 
     try:
         ipaddress.ip_address(ip_txt)
         print(
-            f"INFO: IP filename reading succeeded and valid IP: "
-            f"'{filename_varname}' '{filename}'"
+            f"INFO: {context}: IP filename reading succeeded and valid IP: "
+            f"'{filename}'"
         )
         return ip_txt
     except ValueError:
         print(
-            f"INFO: IP filename reading succeeded but not a valid IP "
-            f"(returning default): '{filename_varname}' '{filename}'"
+            f"INFO: {context}: IP filename reading succeeded but not a valid "
+            f"IP (returning default): '{filename}'"
         )
         return default
 
@@ -347,8 +329,8 @@ def maybe_reload_tor() -> None:
     try:
         if subprocess.check_output(["systemctl", "is-active", "tor@default"]):
             print("INFO: executing: systemctl restart tor@default")
-            # Restarting instead of reloading due to upstream Tor bug
-            # https://gitlab.torproject.org/tpo/core/tor/-/issues/16161
+            ## Restarting instead of reloading due to upstream Tor bug
+            ## https://gitlab.torproject.org/tpo/core/tor/-/issues/16161
             subprocess.call(["systemctl", "restart", "tor@default"])
     except subprocess.CalledProcessError:
         print(
@@ -380,16 +362,24 @@ def main() -> None:
     ## IP HARDCODED, but this does not matter for Non-Qubes-Whonix. This script
     ## is currently only used in Qubes-Whonix.
     whonix_gateway_ipv4_eth1_last: str = get_ip_address(
-        WHONIX_GATEWAY_IP4_ETH1_SAVE_FILE, whonix_gateway_ipv4_eth1_default
+        "Getting IPv4 address for Gateway",
+        WHONIX_GATEWAY_IP4_ETH1_SAVE_FILE,
+        whonix_gateway_ipv4_eth1_default,
     )
     whonix_gateway_ipv6_eth1_last: str = get_ip_address(
-        WHONIX_GATEWAY_IP6_ETH1_SAVE_FILE, whonix_gateway_ipv6_eth1_default
+        "Getting IPv6 address for Gateway",
+        WHONIX_GATEWAY_IP6_ETH1_SAVE_FILE,
+        whonix_gateway_ipv6_eth1_default,
     )
     whonix_workstation_ipv4_eth0_last: str = get_ip_address(
-        WHONIX_WORKSTATION_IP4_ETH0_SAVE_FILE, whonix_workstation_ipv4_eth0_default
+        "Getting IPv4 address for Workstation",
+        WHONIX_WORKSTATION_IP4_ETH0_SAVE_FILE,
+        whonix_workstation_ipv4_eth0_default,
     )
     whonix_workstation_ipv6_eth0_last: str = get_ip_address(
-        WHONIX_WORKSTATION_IP6_ETH0_SAVE_FILE, whonix_workstation_ipv6_eth0_default
+        "Getting IPv6 address for Workstation",
+        WHONIX_WORKSTATION_IP6_ETH0_SAVE_FILE,
+        whonix_workstation_ipv6_eth0_default,
     )
 
     assert whonix_gateway_ipv4_eth1_last != ""
@@ -397,10 +387,22 @@ def main() -> None:
     assert whonix_workstation_ipv4_eth0_last != ""
     assert whonix_workstation_ipv6_eth0_last != ""
 
-    print(f"INFO: whonix_gateway_ipv4_eth1_last    : {whonix_gateway_ipv4_eth1_last}")
-    print(f"INFO: whonix_gateway_ipv6_eth1_last    : {whonix_gateway_ipv6_eth1_last}")
-    print(f"INFO: whonix_workstation_ipv4_eth0_last: {whonix_workstation_ipv4_eth0_last}")
-    print(f"INFO: whonix_workstation_ipv6_eth0_last: {whonix_workstation_ipv6_eth0_last}")
+    print(
+        "INFO: whonix_gateway_ipv4_eth1_last    : "
+        f"{whonix_gateway_ipv4_eth1_last}"
+    )
+    print(
+        "INFO: whonix_gateway_ipv6_eth1_last    : "
+        f"{whonix_gateway_ipv6_eth1_last}"
+    )
+    print(
+        "INFO: whonix_workstation_ipv4_eth0_last: "
+        f"{whonix_workstation_ipv4_eth0_last}"
+    )
+    print(
+        "INFO: whonix_workstation_ipv6_eth0_last: "
+        f"{whonix_workstation_ipv6_eth0_last}"
+    )
 
     qubes_ipv4_qubesdb_qubes_ip: str | None = None
     qubes_ipv4_qubesdb_qubes_netvm_gateway: str | None = None
@@ -452,6 +454,8 @@ def main() -> None:
                 whonix_gateway_ipv4_eth1_default,
             ]
             replace_ip(
+                "Whonix-Gateway, updating IPv4 address(es) shown to "
+                "Workstation",
                 gateway_ipv4_eth1_ips_to_replace,
                 qubes_ipv4_qubesdb_qubes_netvm_gateway,
                 SEARCH_AND_REPLACE_FILE_LIST,
@@ -464,6 +468,8 @@ def main() -> None:
                 whonix_gateway_ipv6_eth1_default,
             ]
             replace_ip(
+                "Whonix-Gateway, updating IPv6 address(es) shown to "
+                "Workstation",
                 gateway_ipv6_eth1_ips_to_replace,
                 qubes_ipv6_qubesdb_qubes_netvm_gateway6,
                 SEARCH_AND_REPLACE_FILE_LIST,
@@ -490,9 +496,12 @@ def main() -> None:
                 "WARNING: 'qubesdb-read /qubes-ip' or 'qubesdb-read "
                 "/qubes-gateway' failed!"
             )
-        print(f"INFO: qubes_ipv4_qubesdb_qubes_ip      : {qubes_ipv4_qubesdb_qubes_ip}")
         print(
-            f"INFO: qubes_ipv4_qubesdb_qubes_gateway : "
+            "INFO: qubes_ipv4_qubesdb_qubes_ip      : "
+            f"{qubes_ipv4_qubesdb_qubes_ip}"
+        )
+        print(
+            "INFO: qubes_ipv4_qubesdb_qubes_gateway : "
             f"{qubes_ipv4_qubesdb_qubes_gateway}"
         )
 
@@ -512,9 +521,12 @@ def main() -> None:
                 "WARNING: 'qubesdb-read /qubes-ip6' or 'qubesdb-read "
                 "/qubes-gateway6' failed!"
             )
-        print(f"INFO: qubes_ipv6_qubesdb_qubes_ip6     : {qubes_ipv6_qubesdb_qubes_ip6}")
         print(
-            f"INFO: qubes_ipv6_qubesdb_qubes_gateway6: "
+            "INFO: qubes_ipv6_qubesdb_qubes_ip6     : "
+            f"{qubes_ipv6_qubesdb_qubes_ip6}"
+        )
+        print(
+            "INFO: qubes_ipv6_qubesdb_qubes_gateway6: "
             f"{qubes_ipv6_qubesdb_qubes_gateway6}"
         )
 
@@ -525,24 +537,29 @@ def main() -> None:
             assert qubes_ipv4_qubesdb_qubes_ip is not None
             assert qubes_ipv4_qubesdb_qubes_gateway is not None
 
-            # Workstation's own IPv4 (10.152.152.11 -> /qubes-ip)
+            ## Workstation's own IPv4 (10.152.152.11 -> /qubes-ip)
             workstation_ipv4_eth0_ips_to_replace: list[str] = [
                 whonix_workstation_ipv4_eth0_last,
                 whonix_workstation_ipv4_eth0_default,
             ]
             replace_ip(
+                "Whonix-Workstation, replacing IPv4 address(es) shown to "
+                "Gateway",
                 workstation_ipv4_eth0_ips_to_replace,
                 qubes_ipv4_qubesdb_qubes_ip,
                 SEARCH_AND_REPLACE_FILE_LIST,
                 WHONIX_WORKSTATION_IP4_ETH0_SAVE_FILE,
             )
 
-            # Gateway IPv4 as seen on workstation (10.152.152.10 -> /qubes-gateway)
+            ## Gateway IPv4 as seen on workstation
+            ## (10.152.152.10 -> /qubes-gateway)
             gateway_ipv4_eth1_ips_for_workstation: list[str] = [
                 whonix_gateway_ipv4_eth1_last,
                 whonix_gateway_ipv4_eth1_default,
             ]
             replace_ip(
+                "Whonix-Workstation, replacing IPv4 address(es) seen from "
+                "Gateway",
                 gateway_ipv4_eth1_ips_for_workstation,
                 qubes_ipv4_qubesdb_qubes_gateway,
                 SEARCH_AND_REPLACE_FILE_LIST,
@@ -556,24 +573,28 @@ def main() -> None:
             assert qubes_ipv6_qubesdb_qubes_ip6 is not None
             assert qubes_ipv6_qubesdb_qubes_gateway6 is not None
 
-            # Workstation's own IPv6
+            ## Workstation's own IPv6
             workstation_ipv6_eth0_ips_to_replace: list[str] = [
                 whonix_workstation_ipv6_eth0_last,
                 whonix_workstation_ipv6_eth0_default,
             ]
             replace_ip(
+                "Whonix-Workstation, replacing IPv6 address(es) shown to "
+                "Gateway",
                 workstation_ipv6_eth0_ips_to_replace,
                 qubes_ipv6_qubesdb_qubes_ip6,
                 SEARCH_AND_REPLACE_FILE_LIST,
                 WHONIX_WORKSTATION_IP6_ETH0_SAVE_FILE,
             )
 
-            # Gateway IPv6 as seen on workstation
+            ## Gateway IPv6 as seen on workstation
             gateway_ipv6_eth1_ips_for_workstation: list[str] = [
                 whonix_gateway_ipv6_eth1_last,
                 whonix_gateway_ipv6_eth1_default,
             ]
             replace_ip(
+                "Whonix-Workstation, replacing IPv6 address(es) seen from "
+                "Gateway",
                 gateway_ipv6_eth1_ips_for_workstation,
                 qubes_ipv6_qubesdb_qubes_gateway6,
                 SEARCH_AND_REPLACE_FILE_LIST,
